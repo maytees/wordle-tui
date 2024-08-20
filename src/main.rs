@@ -13,7 +13,11 @@ use ratatui::{
     },
     Frame,
 };
-use std::io::Result;
+
+use color_eyre::{
+    eyre::{bail, WrapErr},
+    Result,
+};
 
 #[derive(Debug, Default)]
 pub struct App {
@@ -25,7 +29,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
-            self.handle_events()?;
+            self.handle_events().wrap_err("Handle events failed")?;
         }
         Ok(())
     }
@@ -104,10 +108,16 @@ impl Widget for &App {
 }
 
 fn main() -> Result<()> {
+    color_eyre::install()?;
     let mut terminal = tui::init()?;
     // App::default() will init app with counter set to 0, and exit set to false
     let app_result = App::default().run(&mut terminal);
-    tui::restore()?;
+    if let Err(err) = tui::restore() {
+        eprintln!(
+            "Fialed to restore terminal. Run reset, or restart terimnal to fix.\n{}",
+            err
+        )
+    }
 
     app_result
 }
