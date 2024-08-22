@@ -2,9 +2,7 @@ mod tui;
 
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{
-        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, ModifierKeyCode,
-    },
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Alignment, Rect},
     style::{Style, Stylize},
     symbols::border,
@@ -17,13 +15,11 @@ use ratatui::{
 };
 
 use std::{
-    collections::HashSet,
-    fs::{self, File},
+    fs::File,
     io::{BufRead, BufReader, Result},
 };
 
-use rand::thread_rng;
-use rand::{random, seq::SliceRandom};
+use rand::seq::SliceRandom;
 
 #[derive(Debug, Default)]
 pub struct App {
