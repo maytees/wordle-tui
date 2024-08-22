@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 rand = "0.8.5"
 ratatui = "0.28.0"
+tui-big-text = "0.6.0"

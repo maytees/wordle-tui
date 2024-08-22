@@ -4,7 +4,7 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Stylize},
+    style::{Style, Stylize},
     symbols::border,
     text::{Line, Text},
     widgets::{
@@ -13,6 +13,7 @@ use ratatui::{
     },
     Frame,
 };
+use tui_big_text::{BigText, PixelSize};
 
 use std::{
     fs::File,
@@ -162,7 +163,7 @@ impl Widget for &App {
 
         top_block.render(outer_layout[0], buf);
 
-        let grid_area = centered_rect(50, 50, outer_layout[0]);
+        let grid_area = centered_rect(50, 80, outer_layout[0]);
 
         let row_constraint = vec![Constraint::Percentage(50); 5];
         let col_constraint = vec![Constraint::Percentage(50); 5];
@@ -181,56 +182,61 @@ impl Widget for &App {
             for (i, cell) in horizontal_layout.iter().enumerate() {
                 let cell_block = Block::bordered()
                     .border_style(Style::default().yellow())
-                    .border_type(BorderType::Thick);
+                    .border_type(BorderType::Rounded);
 
                 cell_block.render(*cell, buf);
 
-                if let Some(char) = self.typing.chars().nth(i) {
+                if let Some(c) = self.typing.chars().nth(i) {
                     if row_index == self.round as usize {
                         let cell_block = Block::bordered()
                             .border_style(Style::default().yellow())
                             .border_type(BorderType::Thick);
 
-                        Paragraph::new(Text::from(char.to_string().gray()))
+                        BigText::builder()
+                            .pixel_size(PixelSize::Quadrant)
+                            .style(Style::new().blue())
+                            .lines(vec![Line::from(c.to_string().bold().gray())])
                             .centered()
-                            .block(cell_block)
+                            .build()
                             .render(*cell, buf);
+
+                        cell_block.render(area, buf)
                     }
                 }
             }
+
+            if self.reveal_answer {
+                let current_word_text = Text::from(self.target_word.as_str().red().underlined());
+                let word_area = centered_rect(30, 30, outer_layout[0]);
+                Paragraph::new(current_word_text)
+                    .centered()
+                    .render(word_area, buf);
+            }
+            // let current_word_text = Text::from(vec![Line::from(vec![if self.reveal_answer {
+            //     self.target_word.as_str().red().underlined()
+            // } else {
+            //     "".into()
+            // }])]);
+
+            // let inner_block = Block::bordered()
+            //     .title(Title::from("W".bold().red()))
+            //     .border_style(Style::default().red())
+            //     .border_type(BorderType::Rounded);
+
+            // let outer_layout = Layout::default()
+            //     .direction(Direction::Vertical)
+            //     .constraints([Constraint::Percentage(100)])
+            //     .split(area);
+
+            // top_block.render(outer_layout[0], buf);
+
+            // let inner_area = centered_rect(30, 20, outer_layout[0]);
+
+            // Paragraph::new(current_word_text)
+            //     .centered()
+            //     .block(inner_block)
+            //     .render(area, buf);
         }
-
-        if self.reveal_answer {
-            let current_word_text = Text::from(self.target_word.as_str().red().underlined());
-            let word_area = centered_rect(30, 30, outer_layout[0]);
-            Paragraph::new(current_word_text)
-                .centered()
-                .render(word_area, buf);
-        }
-        // let current_word_text = Text::from(vec![Line::from(vec![if self.reveal_answer {
-        //     self.target_word.as_str().red().underlined()
-        // } else {
-        //     "".into()
-        // }])]);
-
-        // let inner_block = Block::bordered()
-        //     .title(Title::from("W".bold().red()))
-        //     .border_style(Style::default().red())
-        //     .border_type(BorderType::Rounded);
-
-        // let outer_layout = Layout::default()
-        //     .direction(Direction::Vertical)
-        //     .constraints([Constraint::Percentage(100)])
-        //     .split(area);
-
-        // top_block.render(outer_layout[0], buf);
-
-        // let inner_area = centered_rect(30, 20, outer_layout[0]);
-
-        // Paragraph::new(current_word_text)
-        //     .centered()
-        //     .block(inner_block)
-        //     .render(area, buf);
     }
 }
 
