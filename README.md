@@ -24,7 +24,5 @@ Controls:
 `<Ctrl-r> to refresh word` _not fully implemented_
 
 Demo Video:
-<video width="320" height="240" controls>
 
-  <source src="wordle_recording.mov" type="video/mp4">
-</video>
+!()[]
