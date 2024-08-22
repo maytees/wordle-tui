@@ -4,9 +4,9 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Style, Stylize},
+    style::{Color, Modifier, Style},
     symbols::border,
-    text::{Line, Text},
+    text::{Line, Span, Text},
     widgets::{
         block::{Position, Title},
         Block, BorderType, Paragraph, Widget,
@@ -32,6 +32,8 @@ pub struct App {
     store: HashMap<u8, String>,
     // 0,1,2,3, or 4 (basically the rows (just add 1 to index))
     // Default: 0
+    validation_store: HashMap<u8, String>,
+    last_submitted_string: String,
     round: u8,
     reveal_answer: bool,
     typing: String,
@@ -119,12 +121,20 @@ impl App {
                 self.reveal_answer = !self.reveal_answer
             }
             KeyCode::Char(char) => {
-                if self.typing.len() != 5 {
+                if !self.win && !self.loss && self.typing.len() < 5 {
                     self.typing.push(char)
                 }
             }
-            KeyCode::Backspace => if let Some(_) = self.typing.pop() {},
-            KeyCode::Enter => self.submit_word(),
+            KeyCode::Backspace => {
+                if !self.win && !self.loss {
+                    self.typing.pop();
+                }
+            }
+            KeyCode::Enter => {
+                if !self.win && !self.loss {
+                    self.submit_word()
+                }
+            }
             _ => {}
         };
 
@@ -136,7 +146,17 @@ impl App {
     }
 
     fn submit_word(&mut self) {
+        if self.typing.len() != 5 {
+            self.error = String::from("Word must be 5 letters long!");
+            return;
+        }
+
         // 1. Check if word even exists in the list
+        if !self.check_word_exist() {
+            self.error = String::from("Word doesn't exist!");
+            return;
+        }
+
         // 2. If the word exists, go character by character and validate
         // 3. If validation succeeds, set win = true
         // 4. If validation doesn't succeed,
@@ -145,49 +165,40 @@ impl App {
         //      If the current round is <4, then increase the round
         //      & set typing = ""
 
-        if !self.check_word_exist() {
-            self.error = String::from("Word doesn't exist!");
-            return;
-        }
-
         // X = not in word, Y = in word, not in right place, G = in the right place
         // For example: if you type MUSIC, but the word was MULCH
         //              it would be GGXXY
-        let mut result = String::from("");
+        let mut result = String::new();
 
         for (i, char) in self.typing.chars().enumerate() {
-            // Check if it's in the current index
             if let Some(target_char) = self.target_word.chars().nth(i) {
                 if target_char == char {
                     result.push('G');
-                    continue;
+                } else if self.target_word.contains(char) {
+                    result.push('Y');
+                } else {
+                    result.push('X');
                 }
             }
-
-            // Since we checked that the char isn't already in the
-            // Correct index, we check if its in the word iteself
-            if self.target_word.contains(char) {
-                result.push('Y');
-                continue;
-            }
-
-            result.push('X');
         }
 
-        if !result.contains('X') || !result.contains('Y') {
+        self.validation_store.insert(self.round, result.clone());
+        self.last_submitted_string = self.typing.clone();
+
+        if result == "GGGGG" {
             self.win = true;
-            return;
         }
 
-        if self.round == 4 {
+        self.store.insert(self.round, self.typing.clone());
+
+        if self.round == 4 && !self.win {
             self.loss = true;
-            return;
+        } else if !self.win {
+            self.round += 1;
+            self.typing.clear();
         }
 
-        self.store.insert(self.round.clone(), self.typing.clone());
-        self.round += 1;
-        self.typing = String::from("");
-        self.error = String::from("");
+        self.error.clear();
     }
 }
 
@@ -213,15 +224,24 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Title::from(" Worlde TUI in Rust ".bold());
+        let title = Title::from(Line::styled(
+            " Wordle TUI in Rust ",
+            Style::default().add_modifier(Modifier::BOLD),
+        ));
         let instruction = Title::from(Line::from(vec![
-            " <Ctrl-r> to refresh word ".blue(),
-            " <Ctrl-v> to reveal word ".blue(),
-            " <Ctrl-q> to exit ".blue(),
+            Span::styled(
+                " <Ctrl-r> to refresh word ",
+                Style::default().fg(Color::Blue),
+            ),
+            Span::styled(
+                " <Ctrl-v> to reveal word ",
+                Style::default().fg(Color::Blue),
+            ),
+            Span::styled(" <Ctrl-q> to exit ", Style::default().fg(Color::Blue)),
         ]));
 
         let top_block = Block::bordered()
-            .border_style(Style::default().blue())
+            .border_style(Style::default().fg(Color::Blue))
             .border_type(BorderType::Rounded)
             .title(title.alignment(Alignment::Center))
             .title(
@@ -240,6 +260,8 @@ impl Widget for &App {
 
         let grid_area = centered_rect(50, 80, outer_layout[0]);
 
+        // index of row_constraint = round
+        // index of col_constraint = letter
         let row_constraint = vec![Constraint::Percentage(50); 5];
         let col_constraint = vec![Constraint::Percentage(50); 5];
 
@@ -258,64 +280,104 @@ impl Widget for &App {
 
             for (i, cell) in horizontal_layout.iter().enumerate() {
                 let cell_block = Block::bordered()
-                    .border_style(Style::default().white())
+                    .border_style(Style::default().fg(Color::White))
                     .border_type(BorderType::Rounded);
 
                 cell_block.render(*cell, buf);
 
                 // Get the current char from the string for the current row from the store
-                if self.round != 0 {
-                    if let Some(value) = self.store.get(&(row_index as u8)) {
-                        let cell_block = Block::default();
+                if let Some(value) = self.store.get(&(row_index as u8)) {
+                    let current_char = value.chars().nth(i).unwrap_or(' ');
+                    let color = if self.win && value == &self.last_submitted_string {
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD)
+                    } else if current_char == self.target_word.chars().nth(i).unwrap_or(' ') {
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD)
+                    } else if self.target_word.contains(current_char) {
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::BOLD)
+                    };
 
-                        BigText::builder()
-                            .pixel_size(PixelSize::Quadrant)
-                            .style(Style::new().blue())
-                            .lines(vec![Line::from(
-                                value
-                                    .chars()
-                                    .nth(i)
-                                    .expect("Could not find char at index")
-                                    .to_string()
-                                    .bold()
-                                    .gray(),
-                            )])
-                            .centered()
-                            .build()
-                            .render(*cell, buf);
+                    BigText::builder()
+                        .pixel_size(PixelSize::Quadrant)
+                        .lines(vec![Line::styled(current_char.to_string(), color)])
+                        .centered()
+                        .build()
+                        .render(*cell, buf);
 
-                        cell_block.render(smaller_area, buf)
-                    }
+                    Block::default().render(smaller_area, buf);
                 }
 
                 if let Some(c) = self.typing.chars().nth(i) {
                     if row_index == self.round as usize {
-                        let cell_block = Block::default();
-
+                        let style = Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::BOLD);
                         BigText::builder()
                             .pixel_size(PixelSize::Quadrant)
-                            .style(Style::new().blue())
-                            .lines(vec![Line::from(c.to_string().bold().gray())])
+                            .lines(vec![Line::styled(c.to_string(), style)])
                             .centered()
                             .build()
                             .render(*cell, buf);
 
-                        cell_block.render(smaller_area, buf)
+                        Block::default().render(smaller_area, buf);
                     }
                 }
             }
+        }
 
-            if self.reveal_answer {
-                let current_word_text = Text::from(self.target_word.as_str().red().underlined());
-                let word_area = centered_rect(30, 95, outer_layout[0]);
-                Paragraph::new(current_word_text)
-                    .centered()
-                    .render(word_area, buf);
-            }
+        if self.reveal_answer {
+            let current_word_text = Text::styled(
+                self.target_word.as_str(),
+                Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::UNDERLINED),
+            );
+            let word_area = centered_rect(30, 95, outer_layout[0]);
+            Paragraph::new(current_word_text)
+                .alignment(Alignment::Center)
+                .render(word_area, buf);
+        }
 
-            let error_text = Text::from(self.error.as_str().red().underlined().bold());
-            let err_area = centered_rect(30, 90, outer_layout[0]);
-            Paragraph::new(error_text).centered().render(err_area, buf);
+        let error_text = Text::styled(
+            self.error.as_str(),
+            Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
+        );
+        let err_area = centered_rect(30, 90, outer_layout[0]);
+        Paragraph::new(error_text)
+            .alignment(Alignment::Center)
+            .render(err_area, buf);
+
+        if self.win {
+            let win_text = Text::styled(
+                "You won!",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            );
+            let win_area = centered_rect(30, 85, outer_layout[0]);
+            Paragraph::new(win_text)
+                .alignment(Alignment::Center)
+                .render(win_area, buf);
+        } else if self.loss {
+            let loss_text = Text::styled(
+                format!("You lost! The word was: {}", self.target_word),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            );
+            let loss_area = centered_rect(30, 85, outer_layout[0]);
+            Paragraph::new(loss_text)
+                .alignment(Alignment::Center)
+                .render(loss_area, buf);
         }
     }
 }
