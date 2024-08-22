@@ -248,6 +248,8 @@ impl Widget for &App {
             .constraints(row_constraint)
             .split(grid_area);
 
+        let smaller_area = Rect::new(38, 4, 110, 40);
+
         for (row_index, row) in vertical_layout.iter().enumerate() {
             let horizontal_layout = Layout::default()
                 .direction(Direction::Horizontal)
@@ -256,7 +258,7 @@ impl Widget for &App {
 
             for (i, cell) in horizontal_layout.iter().enumerate() {
                 let cell_block = Block::bordered()
-                    .border_style(Style::default().yellow())
+                    .border_style(Style::default().white())
                     .border_type(BorderType::Rounded);
 
                 cell_block.render(*cell, buf);
@@ -264,9 +266,7 @@ impl Widget for &App {
                 // Get the current char from the string for the current row from the store
                 if self.round != 0 {
                     if let Some(value) = self.store.get(&(row_index as u8)) {
-                        let cell_block = Block::bordered()
-                            .border_style(Style::default().yellow())
-                            .border_type(BorderType::Thick);
+                        let cell_block = Block::default();
 
                         BigText::builder()
                             .pixel_size(PixelSize::Quadrant)
@@ -284,15 +284,13 @@ impl Widget for &App {
                             .build()
                             .render(*cell, buf);
 
-                        cell_block.render(area, buf)
+                        cell_block.render(smaller_area, buf)
                     }
                 }
 
                 if let Some(c) = self.typing.chars().nth(i) {
                     if row_index == self.round as usize {
-                        let cell_block = Block::bordered()
-                            .border_style(Style::default().yellow())
-                            .border_type(BorderType::Thick);
+                        let cell_block = Block::default();
 
                         BigText::builder()
                             .pixel_size(PixelSize::Quadrant)
@@ -302,7 +300,7 @@ impl Widget for &App {
                             .build()
                             .render(*cell, buf);
 
-                        cell_block.render(area, buf)
+                        cell_block.render(smaller_area, buf)
                     }
                 }
             }
