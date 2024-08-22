@@ -20,9 +20,12 @@ cargo run
 Controls:
 
 `<Ctrl-q> to exit`
+
 `<Ctrl-v> to reveal word`
+
 `<Ctrl-r> to refresh word` _not fully implemented_
 
 Demo Video:
 
-!()[]
+https://github.com/user-attachments/assets/6f514b85-d82d-40b9-8505-74506bb9f6d7
+
