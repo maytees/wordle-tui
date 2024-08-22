@@ -2,20 +2,21 @@ mod tui;
 
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Style, Stylize},
     symbols::border,
     text::{Line, Text},
     widgets::{
         block::{Position, Title},
-        Block, BorderType, Padding, Paragraph, Widget,
+        Block, BorderType, Paragraph, Widget,
     },
     Frame,
 };
 use tui_big_text::{BigText, PixelSize};
 
 use std::{
+    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, Result},
 };
@@ -25,11 +26,19 @@ use rand::seq::SliceRandom;
 #[derive(Debug, Default)]
 pub struct App {
     target_word: String,
+    // This is a way to store the old rounds
+    // u8 is the round, and the string would be split using chars(),
+    // "distributed" to the boxes
+    store: HashMap<u8, String>,
     // 0,1,2,3, or 4 (basically the rows (just add 1 to index))
     // Default: 0
     round: u8,
     reveal_answer: bool,
     typing: String,
+    win: bool,
+    loss: bool,
+    // For errors such as "wrong word", and etc.
+    error: String,
     exit: bool,
 }
 
@@ -43,6 +52,16 @@ impl App {
             self.handle_events()?;
         }
         Ok(())
+    }
+
+    pub fn check_word_exist(&self) -> bool {
+        let path = "fiveletterwords.txt";
+        let file = File::open(path).expect("Failed to open file!");
+        let reader = BufReader::new(file);
+
+        let words: Vec<String> = reader.lines().filter_map(Result::ok).collect();
+
+        words.contains(&self.typing)
     }
 
     pub fn choose_random_word(&mut self) -> Result<()> {
@@ -105,6 +124,7 @@ impl App {
                 }
             }
             KeyCode::Backspace => if let Some(_) = self.typing.pop() {},
+            KeyCode::Enter => self.submit_word(),
             _ => {}
         };
 
@@ -113,6 +133,61 @@ impl App {
 
     fn exit(&mut self) {
         self.exit = true;
+    }
+
+    fn submit_word(&mut self) {
+        // 1. Check if word even exists in the list
+        // 2. If the word exists, go character by character and validate
+        // 3. If validation succeeds, set win = true
+        // 4. If validation doesn't succeed,
+        //      If the current round is == 4 (5th round)
+        //      Exit for now.
+        //      If the current round is <4, then increase the round
+        //      & set typing = ""
+
+        if !self.check_word_exist() {
+            self.error = String::from("Word doesn't exist!");
+            return;
+        }
+
+        // X = not in word, Y = in word, not in right place, G = in the right place
+        // For example: if you type MUSIC, but the word was MULCH
+        //              it would be GGXXY
+        let mut result = String::from("");
+
+        for (i, char) in self.typing.chars().enumerate() {
+            // Check if it's in the current index
+            if let Some(target_char) = self.target_word.chars().nth(i) {
+                if target_char == char {
+                    result.push('G');
+                    continue;
+                }
+            }
+
+            // Since we checked that the char isn't already in the
+            // Correct index, we check if its in the word iteself
+            if self.target_word.contains(char) {
+                result.push('Y');
+                continue;
+            }
+
+            result.push('X');
+        }
+
+        if !result.contains('X') || !result.contains('Y') {
+            self.win = true;
+            return;
+        }
+
+        if self.round == 4 {
+            self.loss = true;
+            return;
+        }
+
+        self.store.insert(self.round.clone(), self.typing.clone());
+        self.round += 1;
+        self.typing = String::from("");
+        self.error = String::from("");
     }
 }
 
@@ -186,6 +261,33 @@ impl Widget for &App {
 
                 cell_block.render(*cell, buf);
 
+                // Get the current char from the string for the current row from the store
+                if self.round != 0 {
+                    if let Some(value) = self.store.get(&(row_index as u8)) {
+                        let cell_block = Block::bordered()
+                            .border_style(Style::default().yellow())
+                            .border_type(BorderType::Thick);
+
+                        BigText::builder()
+                            .pixel_size(PixelSize::Quadrant)
+                            .style(Style::new().blue())
+                            .lines(vec![Line::from(
+                                value
+                                    .chars()
+                                    .nth(i)
+                                    .expect("Could not find char at index")
+                                    .to_string()
+                                    .bold()
+                                    .gray(),
+                            )])
+                            .centered()
+                            .build()
+                            .render(*cell, buf);
+
+                        cell_block.render(area, buf)
+                    }
+                }
+
                 if let Some(c) = self.typing.chars().nth(i) {
                     if row_index == self.round as usize {
                         let cell_block = Block::bordered()
@@ -212,30 +314,6 @@ impl Widget for &App {
                     .centered()
                     .render(word_area, buf);
             }
-            // let current_word_text = Text::from(vec![Line::from(vec![if self.reveal_answer {
-            //     self.target_word.as_str().red().underlined()
-            // } else {
-            //     "".into()
-            // }])]);
-
-            // let inner_block = Block::bordered()
-            //     .title(Title::from("W".bold().red()))
-            //     .border_style(Style::default().red())
-            //     .border_type(BorderType::Rounded);
-
-            // let outer_layout = Layout::default()
-            //     .direction(Direction::Vertical)
-            //     .constraints([Constraint::Percentage(100)])
-            //     .split(area);
-
-            // top_block.render(outer_layout[0], buf);
-
-            // let inner_area = centered_rect(30, 20, outer_layout[0]);
-
-            // Paragraph::new(current_word_text)
-            //     .centered()
-            //     .block(inner_block)
-            //     .render(area, buf);
         }
     }
 }
