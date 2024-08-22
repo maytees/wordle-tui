@@ -309,11 +309,15 @@ impl Widget for &App {
 
             if self.reveal_answer {
                 let current_word_text = Text::from(self.target_word.as_str().red().underlined());
-                let word_area = centered_rect(30, 30, outer_layout[0]);
+                let word_area = centered_rect(30, 95, outer_layout[0]);
                 Paragraph::new(current_word_text)
                     .centered()
                     .render(word_area, buf);
             }
+
+            let error_text = Text::from(self.error.as_str().red().underlined().bold());
+            let err_area = centered_rect(30, 90, outer_layout[0]);
+            Paragraph::new(error_text).centered().render(err_area, buf);
         }
     }
 }
