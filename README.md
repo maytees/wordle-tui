@@ -29,3 +29,4 @@ Demo Video:
 
 https://github.com/user-attachments/assets/6f514b85-d82d-40b9-8505-74506bb9f6d7
 
+*note: I revealed the answer in the video because I suck at wordle*
